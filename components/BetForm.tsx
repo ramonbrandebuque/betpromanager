@@ -1,20 +1,41 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BetStatus, Bet, Language } from '../types';
 import { translations } from '../i18n';
 
 interface BetFormProps {
   onAdd: (bet: Omit<Bet, 'id' | 'profit'>) => void;
+  onUpdate: (bet: Bet) => void;
+  onCancelEdit: () => void;
+  editingBet: Bet | null;
   lang: Language;
 }
 
-const BetForm: React.FC<BetFormProps> = ({ onAdd, lang }) => {
+const BetForm: React.FC<BetFormProps> = ({ onAdd, onUpdate, onCancelEdit, editingBet, lang }) => {
   const [games, setGames] = useState<{ event: string; odd: string }[]>([{ event: '', odd: '' }]);
   const [type, setType] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [stake, setStake] = useState<string>('');
   
   const t = translations[lang];
+
+  useEffect(() => {
+    if (editingBet) {
+      setType(editingBet.type);
+      setDate(editingBet.date);
+      setStake(editingBet.stake.toString());
+      if (editingBet.subGames && editingBet.subGames.length > 0) {
+        setGames(editingBet.subGames.map(g => ({ event: g.event, odd: g.odd.toString() })));
+      } else {
+        setGames([{ event: editingBet.match, odd: editingBet.odds.toString() }]);
+      }
+    } else {
+      setGames([{ event: '', odd: '' }]);
+      setType('');
+      setDate(new Date().toISOString().split('T')[0]);
+      setStake('');
+    }
+  }, [editingBet]);
 
   const totalOdds = useMemo(() => {
     const validOdds = games
@@ -56,15 +77,31 @@ const BetForm: React.FC<BetFormProps> = ({ onAdd, lang }) => {
     const hasInvalidGames = games.some(g => !g.event || isNaN(parseFloat(g.odd)));
     if (hasInvalidGames || !type) return;
 
-    onAdd({
-      match: games.length > 1 ? `${t.multiple} (${games.length})` : games[0].event,
-      type,
-      date,
-      odds: totalOdds || 1,
-      stake: parsedStake,
-      status: BetStatus.PENDING,
-      subGames: games.length > 1 ? games.map(g => ({ event: g.event, odd: parseFloat(g.odd) })) : undefined
-    });
+    const betMatch = games.length > 1 ? `${t.multiple} (${games.length})` : games[0].event;
+    const betOdds = totalOdds || 1;
+    const betSubGames = games.length > 1 ? games.map(g => ({ event: g.event, odd: parseFloat(g.odd) })) : undefined;
+
+    if (editingBet) {
+      onUpdate({
+        ...editingBet,
+        match: betMatch,
+        type,
+        date,
+        odds: betOdds,
+        stake: parsedStake,
+        subGames: betSubGames
+      });
+    } else {
+      onAdd({
+        match: betMatch,
+        type,
+        date,
+        odds: betOdds,
+        stake: parsedStake,
+        status: BetStatus.PENDING,
+        subGames: betSubGames
+      });
+    }
 
     setGames([{ event: '', odd: '' }]);
     setType('');
@@ -73,7 +110,9 @@ const BetForm: React.FC<BetFormProps> = ({ onAdd, lang }) => {
 
   return (
     <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 transition-colors">
-      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">{t.newBet}</h3>
+      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">
+        {editingBet ? t.editBet : t.newBet}
+      </h3>
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -153,9 +192,20 @@ const BetForm: React.FC<BetFormProps> = ({ onAdd, lang }) => {
           )}
         </div>
       </div>
-      <button type="submit" className="mt-6 w-full bg-slate-900 dark:bg-blue-600 hover:bg-blue-600 dark:hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-all shadow-md active:scale-[0.98]">
-        {t.registerButton}
-      </button>
+      <div className="flex flex-col gap-2 mt-6">
+        <button type="submit" className="w-full bg-slate-900 dark:bg-blue-600 hover:bg-blue-600 dark:hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-all shadow-md active:scale-[0.98]">
+          {editingBet ? t.updateButton : t.registerButton}
+        </button>
+        {editingBet && (
+          <button 
+            type="button" 
+            onClick={onCancelEdit}
+            className="w-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold py-3 rounded-lg transition-all hover:bg-slate-200 dark:hover:bg-slate-700"
+          >
+            {t.cancelButton}
+          </button>
+        )}
+      </div>
     </form>
   );
 };

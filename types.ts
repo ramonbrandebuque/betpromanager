@@ -62,6 +62,9 @@ export interface Translations {
   iaAnalysisTitle: string;
   iaError: string;
   newBet: string;
+  editBet: string;
+  updateButton: string;
+  cancelButton: string;
   betType: string;
   date: string;
   stakeLabel: string;

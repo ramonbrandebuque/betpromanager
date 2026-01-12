@@ -30,6 +30,8 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [editingBet, setEditingBet] = useState<Bet | null>(null);
+
   const [filter, setFilter] = useState<FilterConfig>({
     type: 'annual',
     year: new Date().getFullYear(),
@@ -85,6 +87,22 @@ const App: React.FC = () => {
     setBets(prev => [newBet, ...prev]);
   }, []);
 
+  const handleUpdateBet = useCallback((updatedBetData: Bet) => {
+    setBets(prev => prev.map(bet => {
+      if (bet.id === updatedBetData.id) {
+        let profit = 0;
+        if (updatedBetData.status === BetStatus.WIN) {
+          profit = (updatedBetData.stake * updatedBetData.odds) - updatedBetData.stake;
+        } else if (updatedBetData.status === BetStatus.LOSS) {
+          profit = -updatedBetData.stake;
+        }
+        return { ...updatedBetData, profit };
+      }
+      return bet;
+    }));
+    setEditingBet(null);
+  }, []);
+
   const updateBetStatus = useCallback((id: string, status: BetStatus) => {
     setBets(prev => prev.map(bet => {
       if (bet.id === id) {
@@ -104,6 +122,12 @@ const App: React.FC = () => {
 
   const deleteBet = useCallback((id: string) => {
     setBets(currentBets => currentBets.filter(b => b.id !== id));
+    if (editingBet?.id === id) setEditingBet(null);
+  }, [editingBet]);
+
+  const startEditing = useCallback((bet: Bet) => {
+    setEditingBet(bet);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   const handleExport = () => {
@@ -259,7 +283,6 @@ const App: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
               </svg>
             </div>
-            {/* O título foi atualizado para usar t.headerTitle para garantir consistência com as traduções */}
             <h1 className="text-xl font-black tracking-tight hidden sm:block">{t.headerTitle}</h1>
           </div>
           
@@ -423,7 +446,13 @@ const App: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-4">
-            <BetForm onAdd={handleAddBet} lang={lang} />
+            <BetForm 
+              onAdd={handleAddBet} 
+              onUpdate={handleUpdateBet} 
+              onCancelEdit={() => setEditingBet(null)} 
+              editingBet={editingBet} 
+              lang={lang} 
+            />
           </div>
           <div className="lg:col-span-8">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 h-full transition-colors overflow-hidden">
@@ -463,7 +492,6 @@ const App: React.FC = () => {
                   <th className={`px-6 py-4 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t.tableOdds}</th>
                   <th className={`px-6 py-4 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t.tableStake}</th>
                   <th className={`px-6 py-4 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t.tableProfit}</th>
-                  {/* Ajuste de centralização mobile aplicado aqui */}
                   <th className={`px-6 py-4 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center md:${isRTL ? 'text-left' : 'text-right'}`}>{t.tableActions}</th>
                 </tr>
               </thead>
@@ -475,6 +503,7 @@ const App: React.FC = () => {
                       bet={bet} 
                       onUpdateStatus={updateBetStatus} 
                       onDelete={deleteBet}
+                      onEdit={startEditing}
                       lang={lang} 
                       currency={currency} 
                     />
