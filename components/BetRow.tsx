@@ -1,20 +1,29 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bet, BetStatus, Language, Currency } from '../types';
 import { translations, currencySymbols } from '../i18n';
 
 interface BetRowProps {
   bet: Bet;
   onUpdateStatus: (id: string, status: BetStatus) => void;
+  onUpdateProfit: (id: string, profit: number) => void;
   onDelete: (id: string) => void;
+  onEdit: (bet: Bet) => void;
   lang: Language;
   currency: Currency;
 }
 
-const BetRow: React.FC<BetRowProps> = ({ bet, onUpdateStatus, onDelete, lang, currency }) => {
+const BetRow: React.FC<BetRowProps> = ({ bet, onUpdateStatus, onUpdateProfit, onDelete, onEdit, lang, currency }) => {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isEditingProfit, setIsEditingProfit] = useState(false);
+  const [tempProfit, setTempProfit] = useState<string>(bet.profit.toString());
+  
   const t = translations[lang];
   const symbol = currencySymbols[currency];
+
+  useEffect(() => {
+    setTempProfit(bet.profit.toString());
+  }, [bet.profit]);
 
   const formatDisplayDate = (dateStr: string) => {
     if (!dateStr) return '--';
@@ -30,6 +39,14 @@ const BetRow: React.FC<BetRowProps> = ({ bet, onUpdateStatus, onDelete, lang, cu
       setIsConfirmingDelete(true);
       setTimeout(() => setIsConfirmingDelete(false), 3000);
     }
+  };
+
+  const handleSaveProfit = () => {
+    const parsed = parseFloat(tempProfit.replace(',', '.'));
+    if (!isNaN(parsed)) {
+      onUpdateProfit(bet.id, parsed);
+    }
+    setIsEditingProfit(false);
   };
 
   const isRTL = lang === 'ar';
@@ -79,7 +96,24 @@ const BetRow: React.FC<BetRowProps> = ({ bet, onUpdateStatus, onDelete, lang, cu
           bet.profit > 0 ? 'text-green-600 dark:text-green-400' : bet.profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-600'
         }`}>
           <span className="md:hidden block text-[9px] text-slate-400 uppercase mb-0.5 font-black">{t.tableProfit}</span>
-          {bet.status === BetStatus.PENDING ? '--' : `${symbol} ${bet.profit.toFixed(2)}`}
+          {isEditingProfit ? (
+            <div className="flex items-center gap-1">
+              <input 
+                type="text" 
+                value={tempProfit} 
+                onChange={(e) => setTempProfit(e.target.value)}
+                onBlur={handleSaveProfit}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveProfit()}
+                autoFocus
+                className="w-16 px-1 py-0.5 bg-white dark:bg-slate-800 border border-blue-500 rounded text-xs font-mono outline-none"
+              />
+              <button onClick={handleSaveProfit} className="text-blue-600 dark:text-blue-400">
+                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+              </button>
+            </div>
+          ) : (
+            bet.status === BetStatus.PENDING ? '--' : `${symbol} ${bet.profit.toFixed(2)}`
+          )}
         </td>
       </div>
 
@@ -108,6 +142,30 @@ const BetRow: React.FC<BetRowProps> = ({ bet, onUpdateStatus, onDelete, lang, cu
             </div>
           )}
           
+          {/* Botão de Editar Aposta (Configurações Gerais) */}
+          <button 
+            type="button" 
+            onClick={() => onEdit(bet)}
+            className="text-slate-300 dark:text-slate-600 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 p-1.5 rounded-lg transition-all"
+            title={t.editBet}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+
+          {/* NOVO: Botão de Cashout / Ajuste de Lucro Manual */}
+          <button 
+            type="button" 
+            onClick={() => setIsEditingProfit(!isEditingProfit)}
+            className={`p-1.5 rounded-lg transition-all ${isEditingProfit ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' : 'text-slate-300 dark:text-slate-600 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30'}`}
+            title={t.cashoutLabel}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+
           <button 
             type="button"
             onClick={handleToggleDelete}

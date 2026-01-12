@@ -30,8 +30,10 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [editingBet, setEditingBet] = useState<Bet | null>(null);
+
   const [filter, setFilter] = useState<FilterConfig>({
-    type: 'annual',
+    type: 'all', // Padrão agora é Consolidado
     year: new Date().getFullYear(),
     month: new Date().getMonth(),
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
@@ -85,6 +87,23 @@ const App: React.FC = () => {
     setBets(prev => [newBet, ...prev]);
   }, []);
 
+  const handleUpdateBet = useCallback((updatedBetData: Bet) => {
+    setBets(prev => prev.map(bet => {
+      if (bet.id === updatedBetData.id) {
+        let profit = updatedBetData.profit;
+        // Se mudou odds ou stake e não foi lucro manual, recalcula
+        if (updatedBetData.status === BetStatus.WIN && profit === bet.profit) {
+          profit = (updatedBetData.stake * updatedBetData.odds) - updatedBetData.stake;
+        } else if (updatedBetData.status === BetStatus.LOSS && profit === bet.profit) {
+          profit = -updatedBetData.stake;
+        }
+        return { ...updatedBetData, profit };
+      }
+      return bet;
+    }));
+    setEditingBet(null);
+  }, []);
+
   const updateBetStatus = useCallback((id: string, status: BetStatus) => {
     setBets(prev => prev.map(bet => {
       if (bet.id === id) {
@@ -102,8 +121,28 @@ const App: React.FC = () => {
     }));
   }, []);
 
+  const handleUpdateProfit = useCallback((id: string, profit: number) => {
+    setBets(prev => prev.map(bet => {
+      if (bet.id === id) {
+        // Ao ajustar lucro manualmente, definimos o status baseado no lucro
+        let status = bet.status;
+        if (status === BetStatus.PENDING || status === BetStatus.VOID) {
+           status = profit > 0 ? BetStatus.WIN : (profit < 0 ? BetStatus.LOSS : BetStatus.VOID);
+        }
+        return { ...bet, profit, status };
+      }
+      return bet;
+    }));
+  }, []);
+
   const deleteBet = useCallback((id: string) => {
     setBets(currentBets => currentBets.filter(b => b.id !== id));
+    if (editingBet?.id === id) setEditingBet(null);
+  }, [editingBet]);
+
+  const startEditing = useCallback((bet: Bet) => {
+    setEditingBet(bet);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   const handleExport = () => {
@@ -170,6 +209,8 @@ const App: React.FC = () => {
 
   const filteredBets = useMemo(() => {
     return bets.filter(bet => {
+      if (filter.type === 'all') return true;
+      
       const betDate = new Date(bet.date + 'T00:00:00');
       if (filter.type === 'annual') {
         return betDate.getFullYear() === filter.year;
@@ -188,10 +229,38 @@ const App: React.FC = () => {
     const localeMap: Record<Language, string> = {
         en: 'en-US', pt: 'pt-BR', es: 'es-ES', fr: 'fr-FR', it: 'it-IT', de: 'de-DE', ar: 'ar-SA'
     };
-    const getMonthNames = (locale: string) => Array.from({length: 12}, (_, i) => new Date(0, i).toLocaleString(locale, {month: 'short'}));
-    const months = getMonthNames(localeMap[lang]);
     
-    if (filter.type === 'annual') {
+    const getMonthLabel = (dateStr: string) => {
+        const d = new Date(dateStr + 'T12:00:00');
+        return d.toLocaleString(localeMap[lang], { month: 'short', year: filter.type === 'all' ? '2-digit' : undefined });
+    };
+
+    if (filter.type === 'all') {
+      if (bets.length === 0) return [];
+      
+      const sortedBets = [...bets].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const firstDate = new Date(sortedBets[0].date + 'T12:00:00');
+      const lastDate = new Date(sortedBets[sortedBets.length - 1].date + 'T12:00:00');
+      
+      const curr = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+      while (curr <= lastDate) {
+        const key = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}`;
+        dataMap[key] = { 
+          label: curr.toLocaleString(localeMap[lang], { month: 'short', year: '2-digit' }), 
+          profit: 0, 
+          sortKey: key 
+        };
+        curr.setMonth(curr.getMonth() + 1);
+      }
+      
+      sortedBets.forEach(bet => {
+        const bDate = new Date(bet.date + 'T12:00:00');
+        const key = `${bDate.getFullYear()}-${String(bDate.getMonth() + 1).padStart(2, '0')}`;
+        if (dataMap[key]) dataMap[key].profit += bet.profit;
+      });
+
+    } else if (filter.type === 'annual') {
+      const months = Array.from({length: 12}, (_, i) => new Date(0, i).toLocaleString(localeMap[lang], {month: 'short'}));
       for (let m = 0; m < 12; m++) {
         const key = `${filter.year}-${String(m + 1).padStart(2, '0')}`;
         dataMap[key] = { label: months[m], profit: 0, sortKey: key };
@@ -221,13 +290,14 @@ const App: React.FC = () => {
         if (dataMap[bet.date]) dataMap[bet.date].profit += bet.profit;
       });
     }
+
     const sortedData = Object.values(dataMap).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
     let cumulative = 0;
     return sortedData.map(item => {
       cumulative += item.profit;
       return { ...item, cumulativeProfit: cumulative };
     });
-  }, [filteredBets, filter, lang]);
+  }, [bets, filteredBets, filter, lang]);
 
   const handleGetInsights = async () => {
     if (filteredBets.length === 0) return;
@@ -259,7 +329,6 @@ const App: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
               </svg>
             </div>
-            {/* O título foi atualizado para usar t.headerTitle para garantir consistência com as traduções */}
             <h1 className="text-xl font-black tracking-tight hidden sm:block">{t.headerTitle}</h1>
           </div>
           
@@ -326,7 +395,7 @@ const App: React.FC = () => {
           <div className="flex-1 min-w-[200px]">
             <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 ml-1">{t.viewLabel}</label>
             <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-              {(['annual', 'monthly', 'custom'] as ViewType[]).map((type) => (
+              {(['all', 'annual', 'monthly', 'custom'] as ViewType[]).map((type) => (
                 <button
                   key={type}
                   onClick={() => setFilter(f => ({ ...f, type }))}
@@ -423,16 +492,29 @@ const App: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-4">
-            <BetForm onAdd={handleAddBet} lang={lang} />
+            <BetForm 
+              onAdd={handleAddBet} 
+              onUpdate={handleUpdateBet} 
+              onCancelEdit={() => setEditingBet(null)} 
+              editingBet={editingBet} 
+              lang={lang} 
+            />
           </div>
           <div className="lg:col-span-8">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 h-full transition-colors overflow-hidden">
-              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6">{t.iaAnalysisTitle}</h3>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6">{filter.type === 'all' ? t.consolidatedResult : t.iaAnalysisTitle}</h3>
               <div className="h-[380px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#1e293b' : '#f1f5f9'} />
-                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: theme === 'dark' ? '#64748b' : '#94a3b8', fontSize: 10, fontWeight: 600 }} dy={10} reversed={isRTL} />
+                    <XAxis 
+                      dataKey="label" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: theme === 'dark' ? '#64748b' : '#94a3b8', fontSize: 10, fontWeight: 600 }} 
+                      dy={10} 
+                      reversed={isRTL} 
+                    />
                     <YAxis axisLine={false} tickLine={false} tick={{ fill: theme === 'dark' ? '#64748b' : '#94a3b8', fontSize: 10, fontWeight: 600 }} orientation={isRTL ? 'right' : 'left'} />
                     <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', backgroundColor: theme === 'dark' ? '#0f172a' : '#fff', color: theme === 'dark' ? '#fff' : '#000' }} cursor={{ fill: theme === 'dark' ? '#1e293b' : '#f8fafc' }} />
                     <Legend verticalAlign="top" height={36}/>
@@ -441,7 +523,15 @@ const App: React.FC = () => {
                         <Cell key={`cell-${index}`} fill={entry.profit >= 0 ? '#10b981' : '#ef4444'} />
                       ))}
                     </Bar>
-                    <Line type="monotone" dataKey="cumulativeProfit" name="Bankroll Evolution" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, fill: '#2563eb', strokeWidth: 2, stroke: theme === 'dark' ? '#0f172a' : '#fff' }} activeDot={{ r: 6 }} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="cumulativeProfit" 
+                      name="Bankroll Evolution" 
+                      stroke="#2563eb" 
+                      strokeWidth={3} 
+                      dot={chartData.length < 24 ? { r: 4, fill: '#2563eb', strokeWidth: 2, stroke: theme === 'dark' ? '#0f172a' : '#fff' } : false} 
+                      activeDot={{ r: 6 }} 
+                    />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -463,7 +553,6 @@ const App: React.FC = () => {
                   <th className={`px-6 py-4 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t.tableOdds}</th>
                   <th className={`px-6 py-4 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t.tableStake}</th>
                   <th className={`px-6 py-4 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider ${isRTL ? 'text-right' : 'text-left'}`}>{t.tableProfit}</th>
-                  {/* Ajuste de centralização mobile aplicado aqui */}
                   <th className={`px-6 py-4 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center md:${isRTL ? 'text-left' : 'text-right'}`}>{t.tableActions}</th>
                 </tr>
               </thead>
@@ -474,7 +563,9 @@ const App: React.FC = () => {
                       key={bet.id} 
                       bet={bet} 
                       onUpdateStatus={updateBetStatus} 
+                      onUpdateProfit={handleUpdateProfit}
                       onDelete={deleteBet}
+                      onEdit={startEditing}
                       lang={lang} 
                       currency={currency} 
                     />

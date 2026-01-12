@@ -28,7 +28,7 @@ export interface Bet {
   subGames?: SubGame[];
 }
 
-export type ViewType = 'annual' | 'monthly' | 'custom';
+export type ViewType = 'all' | 'annual' | 'monthly' | 'custom';
 
 export type Language = 'en' | 'pt' | 'es' | 'fr' | 'it' | 'de' | 'ar';
 export type Currency = 'USD' | 'BRL' | 'EUR';
@@ -47,6 +47,7 @@ export interface Translations {
   periodResult: string;
   consolidatedResult: string;
   viewLabel: string;
+  all: string;
   annual: string;
   monthly: string;
   custom: string;
@@ -62,6 +63,9 @@ export interface Translations {
   iaAnalysisTitle: string;
   iaError: string;
   newBet: string;
+  editBet: string;
+  updateButton: string;
+  cancelButton: string;
   betType: string;
   date: string;
   stakeLabel: string;
@@ -105,4 +109,7 @@ export interface Translations {
   importLabel: string;
   importSuccess: string;
   importError: string;
+  // Cashout
+  cashoutLabel: string;
+  saveProfit: string;
 }
