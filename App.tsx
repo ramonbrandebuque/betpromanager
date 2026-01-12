@@ -87,6 +87,23 @@ const App: React.FC = () => {
     setBets(prev => [newBet, ...prev]);
   }, []);
 
+  const handleUpdateBet = useCallback((updatedBetData: Bet) => {
+    setBets(prev => prev.map(bet => {
+      if (bet.id === updatedBetData.id) {
+        let profit = updatedBetData.profit;
+        // Se mudou odds ou stake e não foi lucro manual, recalcula
+        if (updatedBetData.status === BetStatus.WIN && profit === bet.profit) {
+          profit = (updatedBetData.stake * updatedBetData.odds) - updatedBetData.stake;
+        } else if (updatedBetData.status === BetStatus.LOSS && profit === bet.profit) {
+          profit = -updatedBetData.stake;
+        }
+        return { ...updatedBetData, profit };
+      }
+      return bet;
+    }));
+    setEditingBet(null);
+  }, []);
+
   const updateBetStatus = useCallback((id: string, status: BetStatus) => {
     setBets(prev => prev.map(bet => {
       if (bet.id === id) {

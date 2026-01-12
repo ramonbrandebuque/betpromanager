@@ -93,7 +93,6 @@ export interface Translations {
   placeholderStake: string;
   placeholderEvent: string;
   placeholderOdd: string;
-  // Auth translations
   authError: string;
   loginTitle: string;
   registerTitle: string;
@@ -104,12 +103,27 @@ export interface Translations {
   createAccountButton: string;
   noAccount: string;
   hasAccount: string;
-  // Import/Export
   exportLabel: string;
   importLabel: string;
   importSuccess: string;
   importError: string;
-  // Cashout
   cashoutLabel: string;
   saveProfit: string;
 }
+
+// Declaração para resolver o erro 'Cannot find name process'
+declare global {
+  interface Window {
+    process: {
+      env: {
+        [key: string]: string | undefined;
+      };
+    };
+  }
+}
+
+declare var process: {
+  env: {
+    [key: string]: string;
+  };
+};
